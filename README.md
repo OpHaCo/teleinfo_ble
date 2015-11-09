@@ -6,7 +6,7 @@ Connect your french EDF electric meter with Bluetooth low energy. Module sends "
 ## An electric meter 
 e.g. : landis gyr+ l1665
 
-<img src="https://raw.githubusercontent.com/Lahorde/teleinfo_ble/landis_gyr_l16c5.jpg" width="400">
+<img src="https://raw.githubusercontent.com/OpHaCo/teleinfo_ble/master/img/landis_gyr_l16c5.jpg" width="300">
 
 #Materials
 
