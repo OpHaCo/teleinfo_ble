@@ -28,20 +28,47 @@
 class Teleinfo {
 public:
 	typedef enum{
+		NOT_HANDLED_GROUP  = -5,
+		INVALID_LENGTH  = -4,
 		INVALID_CRC  = -3,
 		INVALID_READ = -2,
 		READ_TIMEOUT = -1,
 		NO_ERROR = 0,
 		FRAME_AVAILABLE = 1,
 	}EError;
+
+	typedef enum{
+		BASE_TAR = 0,
+		HC_TAR   = 1,
+		EJP_TAR  = 2,
+		OPT_TAR_OUT_OF_ENUM
+	}EOptTar;
+
+	typedef enum{
+		TH   = 0,
+		HC   = 1,
+		HP   = 2,
+		HN   = 3,
+		PM   = 4,
+		PTEC_OUT_OF_ENUM
+	}EPTEC;
+
 private:
 	template <class T>
 	class FrameField{
+	public:
 		/** field name */
-		const char* name;
+		const char* _as8_name;
 		/** number of field data bytes */
-		const uint8_t nbBytes;
-		T fieldValue;
+		const uint8_t _u8_nbBytes;
+		T _fieldValue;
+		FrameField(const char* arg_as8_fieldName,
+				const uint8_t arg_u8_nbBytes,
+				T arg_value):
+			_as8_name(arg_as8_fieldName),
+			_u8_nbBytes(arg_u8_nbBytes),
+			_fieldValue(arg_value)
+		{}
 	};
 
 	static const uint8_t START_TEXT        = 0x02;
@@ -63,6 +90,28 @@ private:
 	uint8_t _currLine[MAX_LINE_LENGTH];
 	bool _continueRead;
 
+	/** teleinfo fields size */
+	static const uint8_t TELEREPORT_HUB_ADDR_LENGTH = 12;
+	static const uint8_t OP_TAR_LENGTH              = 4;
+	static const uint8_t INDEX_LENGTH                = 8;
+	static const uint8_t GAZ_INDEX_LENGTH                = 7;
+	static const uint8_t PTEC_LENGTH                = 4;
+	static const uint8_t MOD_ETAT_LENGTH                = 6;
+	static const uint8_t CURR_INT_LENGTH                = 3;
+
+	/** telefinfo fields */
+	FrameField<char*>     _telereport_hub_addr   = FrameField<char*>    ("ADCO",       TELEREPORT_HUB_ADDR_LENGTH,  NULL);
+	FrameField<EOptTar>   _optTar                = FrameField<EOptTar>  ("OPTARIF",    OP_TAR_LENGTH,               OPT_TAR_OUT_OF_ENUM);
+	FrameField<uint32_t>  _baseIndex             = FrameField<uint32_t> ("BASE",       INDEX_LENGTH,                0);
+	FrameField<uint32_t>  _hcIndex               = FrameField<uint32_t> ("HCHC",       INDEX_LENGTH,                0);
+	FrameField<uint32_t>  _hpIndex               = FrameField<uint32_t> ("HCHP",       INDEX_LENGTH,                0);
+	FrameField<uint32_t>  _ejpHMIndex            = FrameField<uint32_t> ("EJPHN",      INDEX_LENGTH,                0);
+	FrameField<uint32_t>  _ejpHPMIndex           = FrameField<uint32_t> ("EJPHPM",     INDEX_LENGTH,                0);
+	FrameField<uint32_t>  _gazIndex              = FrameField<uint32_t> ("GAZ",        GAZ_INDEX_LENGTH,            0);
+	FrameField<EPTEC>     _currTar               = FrameField<EPTEC>    ("PTEC",       PTEC_LENGTH,                 PTEC_OUT_OF_ENUM);
+	FrameField<char*>     _modEtat               = FrameField<char*>    ("MOTDETAT",   MOD_ETAT_LENGTH,             NULL);
+	FrameField<uint16_t>  _instInt               = FrameField<uint16_t> ("IINST",      CURR_INT_LENGTH,             0);
+
 public:
 	Teleinfo(Stream* arg_p_stream);
 
@@ -80,6 +129,15 @@ public:
 
 private:
 	/**
+	 * Parse given group and updates related teleinfo values
+	 * @param arg_s8_label
+	 * @param arg_u8_value
+	 * @param arg_u8_valueLen
+	 * @return
+	 */
+	EError parseGroup(char * arg_s8_label, uint8_t * arg_u8_value, uint8_t arg_u8_valueLen);
+
+	/**
 	 * Read a given number of bytes
 	 * @param arg_u8_readByte
 	 * @param arg_u8_nbBytes
@@ -92,6 +150,12 @@ private:
 	 * @return
 	 */
 	EError readInfoGroups(void);
+
+	/**
+	 * Read an info group
+	 * @return
+	 */
+	EError readInfoGroup(void);
 
 	/**
 	 * @param label read

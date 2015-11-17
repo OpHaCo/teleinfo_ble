@@ -31,11 +31,20 @@ Teleinfo::Teleinfo(Stream* arg_p_stream) :
 	_continueRead(false)
 {
 	memset(_currLine, 0, MAX_LINE_LENGTH);
-
+	_telereport_hub_addr._fieldValue = (char*)malloc(TELEREPORT_HUB_ADDR_LENGTH + 1);
+	_modEtat._fieldValue             = (char*)malloc(MOD_ETAT_LENGTH + 1);
 }
 
 Teleinfo::~Teleinfo() {
-	// TODO Auto-generated destructor stub
+	if(_telereport_hub_addr._fieldValue)
+	{
+		free(_telereport_hub_addr._fieldValue);
+	}
+
+	if(_modEtat._fieldValue)
+	{
+		free(_modEtat._fieldValue);
+	}
 }
 
 void Teleinfo::startRead(void)
@@ -62,12 +71,13 @@ void Teleinfo::startRead(void)
 			}
 			else
 			{
+
 				LOG_INFO_LN("Info groups successfully read");
 			}
 		}
 		else if(loc_u8_buff[0] == END_TEXT)
 		{
-			LOG_INFO_LN("End of frame");
+			LOG_DEBUG_LN("End of frame");
 		}
 		else if(loc_u8_buff[0] == END_OF_TEXT)
 		{
@@ -83,123 +93,189 @@ void Teleinfo::startRead(void)
 Teleinfo::EError Teleinfo::readInfoGroups(void)
 {
 	uint8_t loc_u8_buff[1] = {0};
-	char loc_s8_label[LABEL_MAX_LENGTH] = {0};
-	uint8_t loc_u8_value[VALUE_MAX_LENGTH] = {0};
-	uint8_t loc_u8_valueLength = 0;
+	Teleinfo::EError loc_e_error = NO_ERROR;
 
-	Teleinfo::EError loc_e_error = readBytes(loc_u8_buff, 1);
-
-	if(loc_e_error < NO_ERROR)
+	while(_continueRead)
 	{
-		LOG_ERROR("Cannot read byte - err = %d", loc_e_error);
-		return INVALID_READ;
-	}
-
-	if(loc_u8_buff[0] == LINE_FEED)
-	{
-		loc_e_error = readGroupLabel(loc_s8_label);
+		loc_e_error = readBytes(loc_u8_buff, 1);
 		if(loc_e_error < NO_ERROR)
 		{
-			LOG_ERROR("Cannot read group label - err = %d", loc_e_error);
+			LOG_ERROR("Cannot read byte - err = %d", loc_e_error);
 			return INVALID_READ;
+		}
+
+		if(loc_u8_buff[0] == LINE_FEED)
+		{
+			loc_e_error = readInfoGroup();
+			if(loc_e_error < NO_ERROR)
+			{
+				//LOG_ERROR("Cannot read info group - err = %d", loc_e_error);
+				return INVALID_READ;
+			}
+		}
+		else if(loc_u8_buff[0] == END_TEXT)
+		{
+			LOG_DEBUG_LN("End of frame - no more info groups to read");
+			return NO_ERROR;
+		}
+		else if(loc_u8_buff[0] == END_OF_TEXT)
+		{
+			LOG_INFO_LN("End of text - no more info groups to read");
+			return NO_ERROR;
 		}
 		else
 		{
-			LOG_INFO_LN("read label = %s", loc_s8_label);
-		}
-
-		loc_e_error = readGroupValue(loc_u8_value, &loc_u8_valueLength);
-		if(loc_e_error < NO_ERROR)
-		{
-			LOG_ERROR("Cannot read group value - err = %d", loc_e_error);
+			//LOG_ERROR("Invalid byte %x received, %x or %x expected", loc_u8_buff[0], LINE_FEED, END_OF_TEXT);
 			return INVALID_READ;
 		}
+	}
 
-		/** now check if read group has a valid CRC */
+	return NO_ERROR;
+}
+
+Teleinfo::EError Teleinfo::readInfoGroup(void)
+{
+	uint8_t loc_u8_buff[1] = {0};
+	char loc_s8_label[LABEL_MAX_LENGTH] = {0};
+	uint8_t loc_au8_value[VALUE_MAX_LENGTH] = {0};
+	uint8_t loc_u8_valueLength = 0;
+	Teleinfo::EError loc_e_error = NO_ERROR;
+
+	loc_e_error = readGroupLabel(loc_s8_label);
+	if(loc_e_error < NO_ERROR)
+	{
+		LOG_ERROR("Cannot read group label - err = %d", loc_e_error);
+		return INVALID_READ;
+	}
+
+	loc_e_error = readGroupValue(loc_au8_value, &loc_u8_valueLength);
+	if(loc_e_error < NO_ERROR)
+	{
+		LOG_ERROR("Cannot read group value - err = %d", loc_e_error);
+		return INVALID_READ;
+	}
+
+	/** now check if read group has a valid CRC */
+	loc_e_error = readBytes(loc_u8_buff, 1);
+
+	if(loc_e_error < NO_ERROR)
+	{
+		LOG_ERROR("Cannot read CRC - err = %d", loc_e_error);
+		return INVALID_READ;
+	}
+
+	if(!isCRCOK(loc_s8_label, loc_au8_value, loc_u8_valueLength, loc_u8_buff[0]))
+	{
+		LOG_ERROR("invalid CRC");
+		return INVALID_CRC;
+	}
+
+	/** now check if read group has a valid CRC */
+	loc_e_error = readBytes(loc_u8_buff, 1);
+
+	if(loc_e_error < NO_ERROR)
+	{
+		LOG_ERROR("Cannot read last group byte - err = %d", loc_e_error);
+		return INVALID_READ;
+	}
+
+	if(loc_u8_buff[0] != CARRIAGE_RET)
+	{
+		LOG_ERROR("Invalid byte %x received, %x expected", loc_u8_buff[0], CARRIAGE_RET);
+		return INVALID_READ;
+	}
+	else
+	{
+		return parseGroup(loc_s8_label, loc_au8_value, loc_u8_valueLength);
+	}
+}
+
+
+Teleinfo::EError Teleinfo::readGroupLabel(char arg_as8_label[LABEL_MAX_LENGTH])
+{
+	uint8_t loc_u8_buff[1] = {0};
+	Teleinfo::EError loc_e_error = NO_ERROR;
+	uint8_t loc_u8_index = 0;
+
+	for(loc_u8_index = 0; loc_u8_index < LABEL_MAX_LENGTH; loc_u8_index++)
+	{
 		loc_e_error = readBytes(loc_u8_buff, 1);
-
 		if(loc_e_error < NO_ERROR)
 		{
-			LOG_ERROR("Cannot read CRC - err = %d", loc_e_error);
+			LOG_ERROR("Cannot read byte - err = %d", loc_e_error);
 			return INVALID_READ;
 		}
-
-		if(!isCRCOK(loc_s8_label, loc_u8_value, loc_u8_valueLength, loc_u8_buff[0]))
+		if(loc_u8_buff[0] != SPACE)
 		{
-			LOG_ERROR("invalid CRC");
-			return INVALID_CRC;
+			arg_as8_label[loc_u8_index] = loc_u8_buff[0];
 		}
+		else
+		{
+			arg_as8_label[loc_u8_index] = '\0';
+			return NO_ERROR;
+		}
+	}
 
-		/** now check if read group has a valid CRC */
+	return INVALID_LENGTH;
+}
+
+Teleinfo::EError Teleinfo::readGroupValue(uint8_t arg_au8_value[VALUE_MAX_LENGTH], uint8_t* arg_u8_value_length)
+{
+	uint8_t loc_u8_buff[1] = {0};
+	Teleinfo::EError loc_e_error = NO_ERROR;
+	*arg_u8_value_length = 0;
+
+	for(*arg_u8_value_length = 0; *arg_u8_value_length < VALUE_MAX_LENGTH; (*arg_u8_value_length)++)
+	{
 		loc_e_error = readBytes(loc_u8_buff, 1);
-
 		if(loc_e_error < NO_ERROR)
 		{
-			LOG_ERROR("Cannot read last group byte - err = %d", loc_e_error);
+			LOG_ERROR("Cannot read byte - err = %d", loc_e_error);
 			return INVALID_READ;
 		}
 
-		if(loc_u8_buff[0] != CARRIAGE_RET)
+		if(loc_u8_buff[0] != SPACE)
 		{
-			LOG_ERROR("Invalid byte %x received, %x expected", loc_u8_buff[0], CARRIAGE_RET);
-			return INVALID_READ;
+			arg_au8_value[*arg_u8_value_length] = loc_u8_buff[0];
 		}
 		else
 		{
 			return NO_ERROR;
 		}
 	}
+
+	return INVALID_LENGTH;
+}
+
+Teleinfo::EError Teleinfo::parseGroup(char * arg_s8_label, uint8_t * arg_u8_value, uint8_t arg_u8_valueLen)
+{
+	if(strcmp(_telereport_hub_addr._as8_name, arg_s8_label) == 0)
+	{
+		if(arg_u8_valueLen != _telereport_hub_addr._u8_nbBytes)
+		{
+			return INVALID_LENGTH;
+		}
+		memset(_telereport_hub_addr._fieldValue, 0, TELEREPORT_HUB_ADDR_LENGTH + 1);
+		strncpy(_telereport_hub_addr._fieldValue, (const char*) arg_u8_value, arg_u8_valueLen);
+		LOG_INFO_LN("%s = %s", _telereport_hub_addr._as8_name, _telereport_hub_addr._fieldValue);
+		return NO_ERROR;
+	}
+	else if(strcmp(_modEtat._as8_name, arg_s8_label) == 0)
+	{
+		if(arg_u8_valueLen != _modEtat._u8_nbBytes)
+		{
+			return INVALID_LENGTH;
+		}
+		memset(_modEtat._fieldValue, 0, MOD_ETAT_LENGTH + 1);
+		strncpy(_modEtat._fieldValue, (const char*) arg_u8_value, arg_u8_valueLen);
+		LOG_INFO_LN("%s = %s", _modEtat._as8_name, _modEtat._fieldValue);
+		return NO_ERROR;
+	}
 	else
 	{
-		LOG_ERROR("Invalid byte %x received, %x expected", loc_u8_buff[0], LINE_FEED);
-		return INVALID_READ;
+		LOG_ERROR("%s group not handled", arg_s8_label);
+		return NOT_HANDLED_GROUP;
 	}
-}
-
-
-
-Teleinfo::EError Teleinfo::readGroupLabel(char arg_as8_label[LABEL_MAX_LENGTH])
-{
-	uint8_t loc_u8_buff[1] = {0};
-	Teleinfo::EError loc_e_error = readBytes(loc_u8_buff, 1);
-	uint8_t loc_u8_index = 0;
-
-	while(loc_u8_buff[0] != SPACE)
-	{
-		arg_as8_label[loc_u8_index++] = loc_u8_buff[0];
-		loc_e_error = readBytes(loc_u8_buff, 1);
-		if(loc_e_error < NO_ERROR)
-		{
-			LOG_ERROR("Cannot read byte - err = %d", loc_e_error);
-			return INVALID_READ;
-		}
-	}
-	arg_as8_label[loc_u8_index] = '\0';
-	return NO_ERROR;
-}
-
-Teleinfo::EError Teleinfo::readGroupValue(uint8_t arg_au8_value[VALUE_MAX_LENGTH], uint8_t* arg_u8_value_length)
-{
-	uint8_t loc_u8_buff[1] = {0};
-	Teleinfo::EError loc_e_error = readBytes(loc_u8_buff, 1);
-	*arg_u8_value_length = 0;
-
-	while(loc_u8_buff[0] != SPACE)
-	{
-		arg_au8_value[(*arg_u8_value_length)++] = loc_u8_buff[0];
-		loc_e_error = readBytes(loc_u8_buff, 1);
-		if(loc_e_error < NO_ERROR)
-		{
-			LOG_ERROR("Cannot read byte - err = %d", loc_e_error);
-			return INVALID_READ;
-		}
-	}
-	return NO_ERROR;
-}
-
-Teleinfo::EError parseValue()
-{
-
 }
 
 
@@ -222,7 +298,7 @@ Teleinfo::EError Teleinfo::readBytes(uint8_t arg_u8_readByte[], uint8_t arg_u8_n
 		{
 			/** transmission on 7 bits - LSB*/
 			arg_u8_readByte[loc_u8_index++] = _p_infoStream->read() & 0x7F;
-			LOG_INFO_LN("  %x", arg_u8_readByte[loc_u8_index - 1]);
+			//LOG_INFO_LN("%x", arg_u8_readByte[loc_u8_index - 1]);
 			loc_u32_startMillis = millis();
 		}
 		else if(millis() - loc_u32_startMillis >= READ_TIMEOUT_MS)
