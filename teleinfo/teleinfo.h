@@ -59,6 +59,16 @@ public:
 		NB_PTEC =  PTEC_OUT_OF_ENUM
 	}EPTEC;
 
+	/** Current pricing option - PTEC */
+	typedef enum{
+		A   = 'a',
+		C   = 'c',
+		D   = 'd',
+		E   = 'e',
+		Y   = 'y',
+		NB_HHPHC =  5
+	}EHHPHC;
+
 private:
 
 	/**
@@ -84,7 +94,8 @@ private:
 	static const uint8_t SPACE             = 0x20;
 	/** carriage return */
 	static const uint8_t CARRIAGE_RET      = 0x0D;
-	static const uint8_t LABEL_MAX_LENGTH  = 7 + 1;
+	/** +1 for null char */
+	static const uint8_t LABEL_MAX_LENGTH  = 8 + 1;
 	static const uint8_t VALUE_MAX_LENGTH  = 15;
 
 	/** Max teleinfo line length */
@@ -100,8 +111,10 @@ private:
 	static const uint8_t PTEC_LENGTH                    = 4;
 	static const uint8_t MOD_ETAT_LENGTH                = 6;
 	static const uint8_t CURR_INT_LENGTH                = 3;
-	static const uint8_t INT_SOUSC_LENGTH               = 2;
+	static const uint8_t INT_LENGTH                     = 2;
 	static const uint8_t PTEC_MESS_LENGTH               = 2;
+	static const uint8_t POWER_LENGTH                   = 5;
+	static const uint8_t HHPHC_LENGTH                   = 1;
 
 	/*********************************************
 	 * teleinfo fields on client power meter side
@@ -118,7 +131,10 @@ private:
 	struct FrameField<EPTEC>     _currTar               = {"PTEC",       PTEC_LENGTH,                 PTEC_OUT_OF_ENUM};
 	struct FrameField<char*>     _modEtat               = {"MOTDETAT",   MOD_ETAT_LENGTH,             NULL};
 	struct FrameField<uint16_t>  _instInt               = {"IINST",      CURR_INT_LENGTH,             0};
-	struct FrameField<uint16_t>  _intSousc              = {"ISOUSC",     INT_SOUSC_LENGTH,            0};
+	struct FrameField<uint16_t>  _maxInt                = {"IMAX",       CURR_INT_LENGTH,             0};
+	struct FrameField<uint16_t>  _souscInt              = {"ISOUSC",     INT_LENGTH,                  0};
+	struct FrameField<uint32_t>  _appPower              = {"PAPP",       POWER_LENGTH,                0};
+	struct FrameField<char>      _hhphc                 = {"HHPHC",      HHPHC_LENGTH,                '0'};
 
 
 

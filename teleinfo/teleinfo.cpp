@@ -59,6 +59,7 @@ const struct PTECMapping Teleinfo::PTEC[NB_PTEC] =
 		{"PM.."  , Teleinfo::PM},
 };
 
+
 /*************************************
  * Method definitions
  *************************************/
@@ -334,14 +335,36 @@ Teleinfo::EError Teleinfo::parseGroup(char * arg_s8_label, uint8_t * arg_u8_valu
 		return INVALID_VALUE;
 	}
 	/** Subscribed intensity -ISOUSC */
-	else if(strcmp(_intSousc._as8_name, arg_s8_label) == 0)
+	else if(strcmp(_souscInt._as8_name, arg_s8_label) == 0)
 	{
-		if(arg_u8_valueLen != _intSousc._u8_nbBytes)
+		if(arg_u8_valueLen != _souscInt._u8_nbBytes)
 		{
 			return INVALID_LENGTH;
 		}
-		_intSousc._fieldValue = atoi((const char*)arg_u8_value);
-		LOG_INFO_LN("%s = %dA", _intSousc._as8_name, _intSousc._fieldValue);
+		_souscInt._fieldValue = atoi((const char*)arg_u8_value);
+		LOG_INFO_LN("%s = %dA", _souscInt._as8_name, _souscInt._fieldValue);
+		return NO_ERROR;
+	}
+	/** Current intensity -IINST */
+	else if(strcmp(_instInt._as8_name, arg_s8_label) == 0)
+	{
+		if(arg_u8_valueLen != _instInt._u8_nbBytes)
+		{
+			return INVALID_LENGTH;
+		}
+		_instInt._fieldValue = atoi((const char*)arg_u8_value);
+		LOG_INFO_LN("%s = %dA", _instInt._as8_name, _instInt._fieldValue);
+		return NO_ERROR;
+	}
+	/** Max called Int -IMAX */
+	else if(strcmp(_maxInt._as8_name, arg_s8_label) == 0)
+	{
+		if(arg_u8_valueLen != _maxInt._u8_nbBytes)
+		{
+			return INVALID_LENGTH;
+		}
+		_maxInt._fieldValue = atoi((const char*)arg_u8_value);
+		LOG_INFO_LN("%s = %dA", _maxInt._as8_name, _maxInt._fieldValue);
 		return NO_ERROR;
 	}
 	/** HCHC index - HCHC */
@@ -406,6 +429,28 @@ Teleinfo::EError Teleinfo::parseGroup(char * arg_s8_label, uint8_t * arg_u8_valu
 			}
 		}
 		return INVALID_VALUE;
+	}
+	/** Apparent power - PAPP */
+	else if(strcmp(_appPower._as8_name, arg_s8_label) == 0)
+	{
+		if(arg_u8_valueLen != _appPower._u8_nbBytes)
+		{
+			return INVALID_LENGTH;
+		}
+		_appPower._fieldValue = atoi((const char*)arg_u8_value);
+		LOG_INFO_LN("%s = %dVA", _appPower._as8_name, _appPower._fieldValue);
+		return NO_ERROR;
+	}
+	/** HHPHC */
+	else if(strcmp(_hhphc._as8_name, arg_s8_label) == 0)
+	{
+		if(arg_u8_valueLen != _hhphc._u8_nbBytes)
+		{
+			return INVALID_LENGTH;
+		}
+		_hhphc._fieldValue = (char)arg_u8_value[0];
+		LOG_INFO_LN("%s = %c", _hhphc._as8_name, _hhphc._fieldValue);
+		return NO_ERROR;
 	}
 	else
 	{
