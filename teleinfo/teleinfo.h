@@ -5,7 +5,7 @@
  *
  * @brief EDF teleinformation class - refer http://norm.edf.fr/pdf/HN44S812emeeditionMars2007.pdf
  * 
- * Project : teleinfo_ble
+ * Project : teleinfo_lib
  * Contact:  Rémi Pincent - remi.pincent@inria.fr
  * 
  * Revision History:
@@ -24,8 +24,9 @@
 
 #include <stdint.h>
 #include <Stream.h>
+#include "teleinfo_listener.h"
 
-class Teleinfo {
+class Teleinfo{
 public:
 	/** Teleinfo errors */
 	typedef enum{
@@ -38,36 +39,6 @@ public:
 		NO_ERROR = 0,
 		FRAME_AVAILABLE = 1,
 	}EError;
-
-	/** Pricing option - OPTAR */
-	typedef enum{
-		BASE_TAR = 0,
-		HC_TAR   = 1,
-		EJP_TAR  = 2,
-		OPT_TAR_OUT_OF_ENUM,
-		NB_OPT_TAR = OPT_TAR_OUT_OF_ENUM
-	}EOptTar;
-
-	/** Current pricing option - PTEC */
-	typedef enum{
-		TH   = 0,
-		HC   = 1,
-		HP   = 2,
-		HN   = 3,
-		PM   = 4,
-		PTEC_OUT_OF_ENUM,
-		NB_PTEC =  PTEC_OUT_OF_ENUM
-	}EPTEC;
-
-	/** Current pricing option - PTEC */
-	typedef enum{
-		A   = 'a',
-		C   = 'c',
-		D   = 'd',
-		E   = 'e',
-		Y   = 'y',
-		NB_HHPHC =  5
-	}EHHPHC;
 
 private:
 
@@ -104,7 +75,6 @@ private:
 	/*****************************
 	 * Teleinfo fields size
 	 *****************************/
-	static const uint8_t TELEREPORT_HUB_ADDR_LENGTH     = 12;
 	static const uint8_t OP_TAR_LENGTH                  = 4;
 	static const uint8_t INDEX_LENGTH                   = 9;
 	static const uint8_t GAZ_INDEX_LENGTH               = 7;
@@ -119,7 +89,7 @@ private:
 	/*********************************************
 	 * teleinfo fields on client power meter side
 	 ********************************************/
-	struct FrameField<char*>     _telereport_hub_addr   = {"ADCO",       TELEREPORT_HUB_ADDR_LENGTH,  NULL};
+	struct FrameField<char*>     _telereportHubAddr     = {"ADCO",       TELEREPORT_HUB_ADDR_LENGTH,  NULL};
 	struct FrameField<EOptTar>   _optTar                = {"OPTARIF",    OP_TAR_LENGTH,               OPT_TAR_OUT_OF_ENUM};
 	struct FrameField<uint32_t>  _baseIndex             = {"BASE",       INDEX_LENGTH,                0};
 	struct FrameField<uint32_t>  _hcIndex               = {"HCHC",       INDEX_LENGTH,                0};
@@ -148,6 +118,7 @@ private:
 	/** teleinfo stream */
 	Stream* _p_infoStream;
 	bool _continueRead;
+	ITeleinfoListener* _p_teleinfoListener;
 
 public:
 
@@ -164,6 +135,9 @@ public:
 	void stopRead(void);
 
 	virtual ~Teleinfo();
+
+	void registerListener(ITeleinfoListener& arg_listener);
+	void unRegisterListener(ITeleinfoListener& arg_listener);
 
 private:
 	/**

@@ -5,7 +5,7 @@
  *
  * @brief TODO_one_line_description_of_file
  * 
- * Project : teleinfo_ble
+ * Project : teleinfo_lib
  * Contact:  Rémi Pincent - remi.pincent@inria.fr
  * 
  * Revision History:
@@ -19,9 +19,11 @@
  * You should have received a copy of the license along with this
  * work.  If not, see <http://creativecommons.org/licenses/by-nc/3.0/>.
  *****************************************************************************/
-#include <teleinfo.h>
+#include "teleinfo.h"
+#include "teleinfo_fields.h"
 #include <delay.h>
 #include <logger.h>
+
 
 /*************************************
  * TYPES only used in this source file
@@ -29,12 +31,12 @@
 
 struct PTECMapping{
 	const char* _teleinfoField;
-	Teleinfo::EPTEC _e_Val;
+	EPTEC _e_Val;
 };
 
 struct OPTarMapping{
 	const char* _teleinfoField;
-	Teleinfo::EOptTar _e_Val;
+	EOptTar _e_Val;
 };
 
 /*************************************
@@ -52,11 +54,11 @@ const struct OPTarMapping Teleinfo::OPT_TAR[NB_OPT_TAR] =
 
 const struct PTECMapping Teleinfo::PTEC[NB_PTEC] =
 {
-		{"TH.."  , Teleinfo::TH},
-		{"HC.."  , Teleinfo::HC},
-		{"HP.."  , Teleinfo::HP},
-		{"HN.."  , Teleinfo::HN},
-		{"PM.."  , Teleinfo::PM},
+		{"TH.."  , TH},
+		{"HC.."  , HC},
+		{"HP.."  , HP},
+		{"HN.."  , HN},
+		{"PM.."  , PM},
 };
 
 
@@ -66,16 +68,17 @@ const struct PTECMapping Teleinfo::PTEC[NB_PTEC] =
 
 Teleinfo::Teleinfo(Stream* arg_p_stream) :
 	_p_infoStream(arg_p_stream),
-	_continueRead(false)
+	_continueRead(false),
+	_p_teleinfoListener(NULL)
 {
-	_telereport_hub_addr._fieldValue = (char*)malloc(TELEREPORT_HUB_ADDR_LENGTH + 1);
+	_telereportHubAddr._fieldValue = (char*)malloc(TELEREPORT_HUB_ADDR_LENGTH + 1);
 	_modEtat._fieldValue             = (char*)malloc(MOD_ETAT_LENGTH + 1);
 }
 
 Teleinfo::~Teleinfo() {
-	if(_telereport_hub_addr._fieldValue)
+	if(_telereportHubAddr._fieldValue)
 	{
-		free(_telereport_hub_addr._fieldValue);
+		free(_telereportHubAddr._fieldValue);
 	}
 
 	if(_modEtat._fieldValue)
@@ -292,15 +295,20 @@ Teleinfo::EError Teleinfo::readGroupValue(uint8_t arg_au8_value[VALUE_MAX_LENGTH
 Teleinfo::EError Teleinfo::parseGroup(char * arg_s8_label, uint8_t * arg_u8_value, uint8_t arg_u8_valueLen)
 {
 	/** Teleinfo HUB address -ADC0 */
-	if(strcmp(_telereport_hub_addr._as8_name, arg_s8_label) == 0)
+	if(strcmp(_telereportHubAddr._as8_name, arg_s8_label) == 0)
 	{
-		if(arg_u8_valueLen != _telereport_hub_addr._u8_nbBytes)
+		if(arg_u8_valueLen != _telereportHubAddr._u8_nbBytes)
 		{
 			return INVALID_LENGTH;
 		}
-		/** +1 for null terminated string */
-		strncpy(_telereport_hub_addr._fieldValue, (const char*) arg_u8_value, TELEREPORT_HUB_ADDR_LENGTH + 1);
-		LOG_INFO_LN("%s = %s", _telereport_hub_addr._as8_name, _telereport_hub_addr._fieldValue);
+
+		if(strcmp(_telereportHubAddr._fieldValue, (char*) arg_u8_value) != 0)
+		{
+			/** +1 for null terminated string */
+			strncpy(_telereportHubAddr._fieldValue, (const char*) arg_u8_value, TELEREPORT_HUB_ADDR_LENGTH + 1);
+			if(_p_teleinfoListener) {_p_teleinfoListener->hubAddrChanged(_telereportHubAddr._fieldValue);}
+			LOG_DEBUG_LN("%s = %s", _telereportHubAddr._as8_name, _telereportHubAddr._fieldValue);
+		}
 		return NO_ERROR;
 	}
 	/** Power meter state - MODETAT */
@@ -310,9 +318,13 @@ Teleinfo::EError Teleinfo::parseGroup(char * arg_s8_label, uint8_t * arg_u8_valu
 		{
 			return INVALID_LENGTH;
 		}
-		memset(_modEtat._fieldValue, 0, MOD_ETAT_LENGTH + 1);
-		strncpy(_modEtat._fieldValue, (const char*) arg_u8_value, arg_u8_valueLen);
-		LOG_INFO_LN("%s = %s", _modEtat._as8_name, _modEtat._fieldValue);
+		/** +1 for null char */
+		if(strcmp(_modEtat._fieldValue, (char*) arg_u8_value) != 0)
+		{
+			strncpy(_modEtat._fieldValue, (const char*) arg_u8_value, arg_u8_valueLen + 1);
+			LOG_DEBUG_LN("%s = %s", _modEtat._as8_name, _modEtat._fieldValue);
+			if(_p_teleinfoListener) {_p_teleinfoListener->modEtatChanged(_modEtat._fieldValue);}
+		}
 		return NO_ERROR;
 	}
 	/** Price option selected - OPTRARIF */
@@ -323,12 +335,16 @@ Teleinfo::EError Teleinfo::parseGroup(char * arg_s8_label, uint8_t * arg_u8_valu
 			return INVALID_LENGTH;
 		}
 
-		for(uint8_t loc_u8_optIndex = 0; loc_u8_optIndex < Teleinfo::NB_OPT_TAR; loc_u8_optIndex++)
+		for(uint8_t loc_u8_optIndex = 0; loc_u8_optIndex < NB_OPT_TAR; loc_u8_optIndex++)
 		{
 			if(strcmp(OPT_TAR[loc_u8_optIndex]._teleinfoField, (const char*) arg_u8_value) == 0)
 			{
-				_optTar._fieldValue = OPT_TAR[loc_u8_optIndex]._e_Val;
-				LOG_INFO_LN("%s = %d", _optTar._as8_name, _optTar._fieldValue);
+				if(_optTar._fieldValue != OPT_TAR[loc_u8_optIndex]._e_Val)
+				{
+					_optTar._fieldValue = OPT_TAR[loc_u8_optIndex]._e_Val;
+					if(_p_teleinfoListener) {_p_teleinfoListener->optTarChanged(_optTar._fieldValue);}
+					LOG_INFO_LN("%s = %d", _optTar._as8_name, _optTar._fieldValue);
+				}
 				return NO_ERROR;
 			}
 		}
@@ -341,8 +357,12 @@ Teleinfo::EError Teleinfo::parseGroup(char * arg_s8_label, uint8_t * arg_u8_valu
 		{
 			return INVALID_LENGTH;
 		}
-		_souscInt._fieldValue = atoi((const char*)arg_u8_value);
-		LOG_INFO_LN("%s = %dA", _souscInt._as8_name, _souscInt._fieldValue);
+		if(_souscInt._fieldValue != atoi((const char*)arg_u8_value))
+		{
+			_souscInt._fieldValue = atoi((const char*)arg_u8_value);
+			if(_p_teleinfoListener) {_p_teleinfoListener->souscIntChanged(_souscInt._fieldValue);}
+			LOG_DEBUG_LN("%s = %dA", _souscInt._as8_name, _souscInt._fieldValue);
+		}
 		return NO_ERROR;
 	}
 	/** Current intensity -IINST */
@@ -352,8 +372,12 @@ Teleinfo::EError Teleinfo::parseGroup(char * arg_s8_label, uint8_t * arg_u8_valu
 		{
 			return INVALID_LENGTH;
 		}
-		_instInt._fieldValue = atoi((const char*)arg_u8_value);
-		LOG_INFO_LN("%s = %dA", _instInt._as8_name, _instInt._fieldValue);
+		if(_instInt._fieldValue != atoi((const char*)arg_u8_value))
+		{
+			_instInt._fieldValue = atoi((const char*)arg_u8_value);
+			if(_p_teleinfoListener) {_p_teleinfoListener->souscIntChanged(_instInt._fieldValue);}
+			LOG_DEBUG_LN("%s = %dA", _instInt._as8_name, _instInt._fieldValue);
+		}
 		return NO_ERROR;
 	}
 	/** Max called Int -IMAX */
@@ -363,8 +387,12 @@ Teleinfo::EError Teleinfo::parseGroup(char * arg_s8_label, uint8_t * arg_u8_valu
 		{
 			return INVALID_LENGTH;
 		}
-		_maxInt._fieldValue = atoi((const char*)arg_u8_value);
-		LOG_INFO_LN("%s = %dA", _maxInt._as8_name, _maxInt._fieldValue);
+		if(_maxInt._fieldValue != atoi((const char*)arg_u8_value))
+		{
+			_maxInt._fieldValue = atoi((const char*)arg_u8_value);
+			if(_p_teleinfoListener) {_p_teleinfoListener->maxIntChanged(_maxInt._fieldValue);}
+			LOG_DEBUG_LN("%s = %dA", _maxInt._as8_name, _maxInt._fieldValue);
+		}
 		return NO_ERROR;
 	}
 	/** HCHC index - HCHC */
@@ -374,8 +402,12 @@ Teleinfo::EError Teleinfo::parseGroup(char * arg_s8_label, uint8_t * arg_u8_valu
 		{
 			return INVALID_LENGTH;
 		}
-		_hcIndex._fieldValue = atoi((const char*) arg_u8_value);
-		LOG_INFO_LN("%s = %dWh", _hcIndex._as8_name, _hcIndex._fieldValue);
+		if(_hcIndex._fieldValue != (uint32_t)atoi((const char*) arg_u8_value))
+		{
+			_hcIndex._fieldValue = atoi((const char*) arg_u8_value);
+			if(_p_teleinfoListener) {_p_teleinfoListener->hcIndexChanged(_hcIndex._fieldValue);}
+			LOG_DEBUG_LN("%s = %dWh", _hcIndex._as8_name, _hcIndex._fieldValue);
+		}
 		return NO_ERROR;
 	}
 	/** Full hour index - HPHP*/
@@ -385,8 +417,12 @@ Teleinfo::EError Teleinfo::parseGroup(char * arg_s8_label, uint8_t * arg_u8_valu
 		{
 			return INVALID_LENGTH;
 		}
-		_hpIndex._fieldValue = atoi((const char*) arg_u8_value);
-		LOG_INFO_LN("%s = %dWh", _hpIndex._as8_name, _hpIndex._fieldValue);
+		if(_hpIndex._fieldValue != (uint32_t)atoi((const char*) arg_u8_value))
+		{
+			_hpIndex._fieldValue = atoi((const char*) arg_u8_value);
+			if(_p_teleinfoListener) {_p_teleinfoListener->hpIndexChanged(_hcIndex._fieldValue);}
+			LOG_DEBUG_LN("%s = %dWh", _hpIndex._as8_name, _hpIndex._fieldValue);
+		}
 		return NO_ERROR;
 	}
 	/** Base index - BASE */
@@ -396,8 +432,12 @@ Teleinfo::EError Teleinfo::parseGroup(char * arg_s8_label, uint8_t * arg_u8_valu
 		{
 			return INVALID_LENGTH;
 		}
-		_baseIndex._fieldValue = atoi((const char*) arg_u8_value);
-		LOG_INFO_LN("%s = %dWh", _baseIndex._as8_name, _baseIndex._fieldValue);
+		if(_baseIndex._fieldValue != (uint32_t)atoi((const char*) arg_u8_value))
+		{
+			_baseIndex._fieldValue = atoi((const char*) arg_u8_value);
+			if(_p_teleinfoListener) {_p_teleinfoListener->baseIndexChanged(_baseIndex._fieldValue);}
+			LOG_DEBUG_LN("%s = %dWh", _baseIndex._as8_name, _baseIndex._fieldValue);
+		}
 		return NO_ERROR;
 	}
 	/** Message indicating EJP - PTEC */
@@ -407,8 +447,12 @@ Teleinfo::EError Teleinfo::parseGroup(char * arg_s8_label, uint8_t * arg_u8_valu
 		{
 			return INVALID_LENGTH;
 		}
-		_ejpMess._fieldValue = atoi((const char*) arg_u8_value);
-		LOG_INFO_LN("%s = %dmin", _ejpMess._as8_name, _ejpMess._fieldValue);
+		if(_ejpMess._fieldValue == atoi((const char*) arg_u8_value))
+		{
+			_ejpMess._fieldValue = atoi((const char*) arg_u8_value);
+			if(_p_teleinfoListener) {_p_teleinfoListener->ejpMessChanged(_ejpMess._fieldValue);}
+			LOG_DEBUG_LN("%s = %dmin", _ejpMess._as8_name, _ejpMess._fieldValue);
+		}
 		return NO_ERROR;
 	}
 	/** Current pricing option - PTEC*/
@@ -419,12 +463,16 @@ Teleinfo::EError Teleinfo::parseGroup(char * arg_s8_label, uint8_t * arg_u8_valu
 			return INVALID_LENGTH;
 		}
 
-		for(uint8_t loc_u8_tarIndex = 0; loc_u8_tarIndex < Teleinfo::NB_PTEC; loc_u8_tarIndex++)
+		for(uint8_t loc_u8_tarIndex = 0; loc_u8_tarIndex < NB_PTEC; loc_u8_tarIndex++)
 		{
 			if(strcmp(PTEC[loc_u8_tarIndex]._teleinfoField, (const char*) arg_u8_value) == 0)
 			{
-				_currTar._fieldValue = PTEC[loc_u8_tarIndex]._e_Val;
-				LOG_INFO_LN("%s = %d", _currTar._as8_name, _currTar._fieldValue);
+			   if(_currTar._fieldValue != PTEC[loc_u8_tarIndex]._e_Val)
+			   {
+				   _currTar._fieldValue = PTEC[loc_u8_tarIndex]._e_Val;
+				   if(_p_teleinfoListener) {_p_teleinfoListener->currTarChanged(_currTar._fieldValue);}
+				   LOG_DEBUG_LN("%s = %d", _currTar._as8_name, _currTar._fieldValue);
+			   }
 				return NO_ERROR;
 			}
 		}
@@ -437,8 +485,12 @@ Teleinfo::EError Teleinfo::parseGroup(char * arg_s8_label, uint8_t * arg_u8_valu
 		{
 			return INVALID_LENGTH;
 		}
-		_appPower._fieldValue = atoi((const char*)arg_u8_value);
-		LOG_INFO_LN("%s = %dVA", _appPower._as8_name, _appPower._fieldValue);
+		if(_appPower._fieldValue != (uint32_t)atoi((const char*)arg_u8_value))
+		{
+			_appPower._fieldValue = atoi((const char*)arg_u8_value);
+			if(_p_teleinfoListener) {_p_teleinfoListener->appPowerChanged(_appPower._fieldValue);}
+			LOG_DEBUG_LN("%s = %dVA", _appPower._as8_name, _appPower._fieldValue);
+		}
 		return NO_ERROR;
 	}
 	/** HHPHC */
@@ -448,8 +500,12 @@ Teleinfo::EError Teleinfo::parseGroup(char * arg_s8_label, uint8_t * arg_u8_valu
 		{
 			return INVALID_LENGTH;
 		}
-		_hhphc._fieldValue = (char)arg_u8_value[0];
-		LOG_INFO_LN("%s = %c", _hhphc._as8_name, _hhphc._fieldValue);
+		if(_hhphc._fieldValue != (char)arg_u8_value[0])
+		{
+			_hhphc._fieldValue = (char)arg_u8_value[0];
+			if(_p_teleinfoListener) {_p_teleinfoListener->hhphcChanged(_hhphc._fieldValue);}
+			LOG_DEBUG_LN("%s = %c", _hhphc._as8_name, _hhphc._fieldValue);
+		}
 		return NO_ERROR;
 	}
 	else
@@ -463,6 +519,23 @@ Teleinfo::EError Teleinfo::parseGroup(char * arg_s8_label, uint8_t * arg_u8_valu
 void Teleinfo::stopRead(void)
 {
 	_continueRead = false;
+}
+
+void Teleinfo::registerListener(ITeleinfoListener& arg_listener)
+{
+	/** only 1 listener */
+	if(_p_teleinfoListener != NULL)
+	{
+		ASSERT(false);
+	}
+	else
+	{
+		 _p_teleinfoListener = &arg_listener;
+	}
+}
+void Teleinfo::unRegisterListener(ITeleinfoListener& arg_listener)
+{
+	_p_teleinfoListener = NULL;
 }
 
 Teleinfo::EError Teleinfo::readBytes(uint8_t arg_u8_readByte[], uint8_t arg_u8_nbBytes)
