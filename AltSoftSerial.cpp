@@ -67,32 +67,28 @@ AltSoftSerial AltSoftSerial::SoftSerial = AltSoftSerial();
 
 AltSoftSerial::AltSoftSerial() : _u8_txPin(INVALID_PIN),
 		_u16_ticks_per_bit(0),
+		_u32_mics_per_byte(0),
 		_b_uartBusy(false),
 		timing_error(false),
 		_u8_sendByte(0),
-		_txBuffer(TX_BUFFER_SIZE)
+		_txBuffer(TX_BUFFER_SIZE),
+		_bit_pos(0)
 {
 
 }
 
-void AltSoftSerial::initTimer(void)
+void AltSoftSerial::initTimer0(void)
 {
-	/** Use TIMER 2 - Also used by Arduino Tone object */
-	/** MUST not use TIMER0 : used by soft_device */
-	NRF_TIMER2->MODE = TIMER_MODE_MODE_Timer;               // Set the timer in Timer Mode.
-	NRF_TIMER2->PRESCALER = 0;                              // Prescaler 0 produces F_CPU/2^prescaler timer frequency => 1 tick = 32 us.
-	NRF_TIMER2->BITMODE     = TIMER_BITMODE_BITMODE_16Bit;  // 16 bit mode
-	NRF_TIMER2->SHORTS = TIMER_SHORTS_COMPARE0_CLEAR_Msk;   // Short to lear IT
-	NRF_TIMER2->TASKS_CLEAR = 1;                            // clear the task first to be usable for later.
-	NRF_TIMER2->INTENSET = TIMER_INTENSET_COMPARE0_Msk;     // Enable IT
-	NRF_TIMER2->CC[0] = _u16_ticks_per_bit;
-
-	IntController_linkInterrupt( TIMER2_IRQn, AltSoftSerial::txTimerIRQ);
-
-    if(!IntController_enableIRQ(TIMER2_IRQn, NRF_APP_PRIORITY_LOW))
-    {
-    	APP_ERROR_CHECK_BOOL(false);
-    }
+	/** Use TIMER0 using timeslot API as it is also used by soft_device */
+	NRF_TIMER0->MODE = TIMER_MODE_MODE_Timer;               // Set the timer in Timer Mode.
+	NRF_TIMER0->PRESCALER = 0;                              // Prescaler 0 produces F_CPU/2^prescaler timer frequency => 1 tick = 32 us.
+	NRF_TIMER0->BITMODE     = TIMER_BITMODE_BITMODE_16Bit;  // 16 bit mode
+	NRF_TIMER0->SHORTS = TIMER_SHORTS_COMPARE0_CLEAR_Msk;   // Short to lear IT
+	NRF_TIMER0->TASKS_CLEAR = 1;                            // clear the task first to be usable for later.
+	NRF_TIMER0->INTENSET = TIMER_INTENSET_COMPARE0_Msk;     // Enable IT
+	NRF_TIMER0->CC[0] = _u16_ticks_per_bit;
+	NRF_TIMER0->EVENTS_COMPARE[0] = 0;
+	NVIC_EnableIRQ(TIMER0_IRQn);
 }
 
 void AltSoftSerial::stopTimer(void)
@@ -105,8 +101,13 @@ void AltSoftSerial::begin(uint32_t baud, uint8_t txPin)
 {
 	_u8_txPin = arduinoToVariantPin(txPin);
 	_u16_ticks_per_bit = F_CPU / baud;
+	/** add 200µs for processing */
+	_u32_mics_per_byte = (1000000/baud) * (8 + 2) + 200;
 
-	initTimer();
+	register_timer0_timeslot_IRQ(AltSoftSerial::txTimer0IRQ);
+	register_timeslot_start_cb(AltSoftSerial::prepare);
+	assert(timeslot_sd_init() == NRF_SUCCESS);
+
 	pinMode(_u8_txPin, OUTPUT);
 	digitalWrite(txPin, HIGH);
 }
@@ -124,6 +125,7 @@ void AltSoftSerial::end(void)
 
 bool AltSoftSerial::writeByte(uint8_t b)
 {
+	uint32_t loc_u32_err = NRF_SUCCESS;
 	if(_txBuffer.pushElement(b) != RingBuffer<uint8_t>::NO_ERROR)
 	{
 		/** May be buffer full... */
@@ -132,12 +134,16 @@ bool AltSoftSerial::writeByte(uint8_t b)
 
     if (!_b_uartBusy)
     {
-    	_b_uartBusy = true;
-    	_txBuffer.popElement(SoftSerial._u8_sendByte);
-
-        // We set start bit active (low)
-    	digitalWrite(_u8_txPin, LOW);
-        NRF_TIMER2->TASKS_START = 1;
+    	/** Request a timeslot for bit banging using with  timer 0 ISR */
+    	loc_u32_err = request_next_event_normal(SoftSerial._u32_mics_per_byte);
+    	if(loc_u32_err == NRF_SUCCESS)
+    	{
+    		SoftSerial._b_uartBusy = true;
+    	}
+    	else
+    	{
+    		SoftSerial._b_uartBusy = false;
+    	}
     }
     else
     {
@@ -147,10 +153,40 @@ bool AltSoftSerial::writeByte(uint8_t b)
 }
 
 
+void AltSoftSerial::prepare(TsNextAction* arg_p_nextAction){
+	if(SoftSerial._txBuffer.elementsAvailable())
+	{
+	    if(SoftSerial._txBuffer.popElement(SoftSerial._u8_sendByte) != RingBuffer<uint8_t>::NO_ERROR)
+	    {
+	    	/** nothing to do - cancel timeslot */
+	    	arg_p_nextAction->callback_action = NRF_RADIO_SIGNAL_CALLBACK_ACTION_END;
+	    	arg_p_nextAction->request_type = NRF_RADIO_REQ_TYPE_NORMAL;
+	    	arg_p_nextAction->slot_length = SoftSerial._u32_mics_per_byte;
+	    	return;
+	    }
+
+	   /** send a byte in timeslot */
+	    nrf_gpio_pin_clear(SoftSerial._u8_txPin);
+	    SoftSerial.initTimer0();
+	    arg_p_nextAction->callback_action = NRF_RADIO_SIGNAL_CALLBACK_ACTION_NONE;
+	    arg_p_nextAction->request_type = NRF_RADIO_REQ_TYPE_NORMAL;
+	    arg_p_nextAction->slot_length =SoftSerial._u32_mics_per_byte;
+	}
+	else
+	{
+    	/** nothing to do - cancel timeslot */
+		arg_p_nextAction->callback_action = NRF_RADIO_SIGNAL_CALLBACK_ACTION_END;
+		arg_p_nextAction->request_type = NRF_RADIO_REQ_TYPE_NORMAL;
+    	arg_p_nextAction->slot_length =SoftSerial._u32_mics_per_byte;
+	}
+}
+
 void AltSoftSerial::flushOutput(void)
 {
-	while (_b_uartBusy) /* wait */ ;
+	/** commented => infinite loop, ok when commented - TODO */
+	//while (_b_uartBusy) /* wait */ ;
 }
+
 
 /**
  * Bit-Bang ring buffer bytes. No parity, start and stop bits, 8 bits
@@ -160,46 +196,54 @@ void AltSoftSerial::flushOutput(void)
  *  |___________|____|____|____|____|____|____|____|____|__________|
  *
  */
-void AltSoftSerial::txTimerIRQ()
+void AltSoftSerial::txTimer0IRQ(TsNextAction* arg_p_nextAction)
 {
-    if(NRF_TIMER2->EVENTS_COMPARE[0])
-    {
-        static uint8_t bit_pos;
-        NRF_TIMER2->EVENTS_COMPARE[0] = 0;
+	arg_p_nextAction->request_type = NRF_RADIO_REQ_TYPE_NORMAL;
+	arg_p_nextAction->slot_length = SoftSerial._u32_mics_per_byte;
 
-        if (bit_pos < UART_STOP_BIT_POS)
+	if(NRF_TIMER0->EVENTS_COMPARE[0])
+    {
+        NRF_TIMER0->EVENTS_COMPARE[0] = 0;
+
+        if (SoftSerial._bit_pos < UART_STOP_BIT_POS)
         {
         	/** set bit at bit_pos */
-            (SoftSerial._u8_sendByte & (1 << bit_pos)) ? digitalWrite(SoftSerial._u8_txPin, HIGH) : digitalWrite(SoftSerial._u8_txPin, LOW);;
-            bit_pos++;
+            (SoftSerial._u8_sendByte & (1 << SoftSerial._bit_pos)) ? nrf_gpio_pin_set(SoftSerial._u8_txPin) : nrf_gpio_pin_clear(SoftSerial._u8_txPin);
+            SoftSerial._bit_pos++;
+            arg_p_nextAction->callback_action = NRF_RADIO_SIGNAL_CALLBACK_ACTION_NONE;
         }
-        else if (bit_pos == UART_STOP_BIT_POS)
+        else if (SoftSerial._bit_pos == UART_STOP_BIT_POS)
         {
-            bit_pos++;
+        	SoftSerial._bit_pos++;
             /** Set stop bit */
-            digitalWrite(SoftSerial._u8_txPin, HIGH);
+            nrf_gpio_pin_set(SoftSerial._u8_txPin);
+            arg_p_nextAction->callback_action = NRF_RADIO_SIGNAL_CALLBACK_ACTION_NONE;
         }
         // We have to wait until STOP bit is finished before releasing m_uart_busy.
-        else if (bit_pos == UART_STOP_BIT_POS + 1)
+        else if (SoftSerial._bit_pos == UART_STOP_BIT_POS + 1)
         {
-            bit_pos = 0;
-            if(!SoftSerial._txBuffer.elementsAvailable())
-            {
-            	/** no more byte to write to UART */
-            	NRF_TIMER2->TASKS_STOP = 1;
-            	SoftSerial._b_uartBusy = false;
-            	SoftSerial._u8_sendByte = 0;
-            	return;
+        	SoftSerial._bit_pos = 0;
+            /** no more byte to write to UART */
+            NRF_TIMER0->TASKS_STOP = 1;
+
+            if(SoftSerial._txBuffer.elementsAvailable()){
+            	/** Some elements to pop : either extend current timeslot or schedule a new timeslot */
+            	arg_p_nextAction->callback_action = NRF_RADIO_SIGNAL_CALLBACK_ACTION_EXTEND;
             }
             else
             {
-            	/** still some bytes to write to UART */
-            	SoftSerial._txBuffer.popElement(SoftSerial._u8_sendByte);
-            	digitalWrite(SoftSerial._u8_txPin, LOW);
+            	arg_p_nextAction->callback_action = NRF_RADIO_SIGNAL_CALLBACK_ACTION_END;
+            	SoftSerial._b_uartBusy = false;
             }
         }
+        else
+        {
+        	assert(false);
+        }
     }
+	else
+	{
+		arg_p_nextAction->callback_action = NRF_RADIO_SIGNAL_CALLBACK_ACTION_NONE;
+	}
 }
-
-
 

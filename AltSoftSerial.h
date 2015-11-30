@@ -48,7 +48,10 @@
 
 #include <inttypes.h>
 #include <ring_buffer.h>
-
+extern "C"
+{
+#include <timeslot.h>
+}
 #if ARDUINO >= 100
 #include "Arduino.h"
 #else
@@ -59,14 +62,16 @@
 class AltSoftSerial : public Stream
 {
 private :
-	static const uint8_t TX_BUFFER_SIZE = 40;
+	static const uint8_t TX_BUFFER_SIZE = 80;
 
 	uint8_t _u8_txPin;
 	uint16_t _u16_ticks_per_bit;
+	uint32_t _u32_mics_per_byte;
 	bool _b_uartBusy;
 	bool timing_error;
 	uint8_t _u8_sendByte;
 	RingBuffer<uint8_t> _txBuffer;
+	int8_t _bit_pos;
 
 public:
 	/** instance */
@@ -101,11 +106,14 @@ public:
 	bool overflow() { bool r = timing_error; timing_error = false; return r; }
 	static int library_version() { return 1; }
 
+	static void txTimer0IRQ(TsNextAction* arg_p_nextAction);
+	static void prepare(TsNextAction*);
+
 private:
 	void initTimer(void);
 	void stopTimer(void);
 	bool writeByte(uint8_t byte);
-	static void txTimerIRQ(void);
+	void initTimer0();
 };
 
 #endif

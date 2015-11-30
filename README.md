@@ -1,12 +1,14 @@
 # Description
-Bit-banging UART
+Bit-banging UART with Tx ring buffer.
 
 # Supported platforms
 * Nordic nrf51 
 
+## Prerequisities
+* Arduino Support => here is a template nrf51 with arduino support https://github.com/Lahorde/nrf51_template_application
+
 ## Limitations
 * only tx Supported
-* bad bit banging when Radio active, e.g when advertising. Timer used for bit banging has lower priority than BLE.
 
 # Code sample
 
@@ -15,3 +17,5 @@ Bit-banging UART
     
 # References
 https://github.com/PaulStoffregen/AltSoftSerial
+https://github.com/Lahorde/nrf51_template_application
+https://devzone.nordicsemi.com/tutorials/16/
