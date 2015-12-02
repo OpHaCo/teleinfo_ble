@@ -77,7 +77,7 @@ AltSoftSerial::AltSoftSerial() : _u8_txPin(INVALID_PIN),
 
 }
 
-void AltSoftSerial::initTimer0(void)
+void AltSoftSerial::startTimer0(void)
 {
 	/** Use TIMER0 using timeslot API as it is also used by soft_device */
 	NRF_TIMER0->MODE = TIMER_MODE_MODE_Timer;               // Set the timer in Timer Mode.
@@ -89,6 +89,7 @@ void AltSoftSerial::initTimer0(void)
 	NRF_TIMER0->CC[0] = _u16_ticks_per_bit;
 	NRF_TIMER0->EVENTS_COMPARE[0] = 0;
 	NVIC_EnableIRQ(TIMER0_IRQn);
+	NRF_TIMER0->TASKS_START = 1;
 }
 
 void AltSoftSerial::stopTimer(void)
@@ -160,33 +161,28 @@ void AltSoftSerial::prepare(TsNextAction* arg_p_nextAction){
 	    {
 	    	/** nothing to do - cancel timeslot */
 	    	arg_p_nextAction->callback_action = NRF_RADIO_SIGNAL_CALLBACK_ACTION_END;
-	    	arg_p_nextAction->request_type = NRF_RADIO_REQ_TYPE_NORMAL;
-	    	arg_p_nextAction->slot_length = SoftSerial._u32_mics_per_byte;
+	    	SoftSerial._b_uartBusy = false;
 	    	return;
 	    }
 
 	   /** send a byte in timeslot */
 	    nrf_gpio_pin_clear(SoftSerial._u8_txPin);
-	    SoftSerial.initTimer0();
+	    SoftSerial.startTimer0();
 	    arg_p_nextAction->callback_action = NRF_RADIO_SIGNAL_CALLBACK_ACTION_NONE;
-	    arg_p_nextAction->request_type = NRF_RADIO_REQ_TYPE_NORMAL;
-	    arg_p_nextAction->slot_length =SoftSerial._u32_mics_per_byte;
 	}
 	else
 	{
     	/** nothing to do - cancel timeslot */
 		arg_p_nextAction->callback_action = NRF_RADIO_SIGNAL_CALLBACK_ACTION_END;
-		arg_p_nextAction->request_type = NRF_RADIO_REQ_TYPE_NORMAL;
-    	arg_p_nextAction->slot_length =SoftSerial._u32_mics_per_byte;
+    	SoftSerial._b_uartBusy = false;
 	}
 }
 
 void AltSoftSerial::flushOutput(void)
 {
 	/** commented => infinite loop, ok when commented - TODO */
-	//while (_b_uartBusy) /* wait */ ;
+	//while (_b_uartBusy) /* wait */;
 }
-
 
 /**
  * Bit-Bang ring buffer bytes. No parity, start and stop bits, 8 bits
@@ -198,9 +194,6 @@ void AltSoftSerial::flushOutput(void)
  */
 void AltSoftSerial::txTimer0IRQ(TsNextAction* arg_p_nextAction)
 {
-	arg_p_nextAction->request_type = NRF_RADIO_REQ_TYPE_NORMAL;
-	arg_p_nextAction->slot_length = SoftSerial._u32_mics_per_byte;
-
 	if(NRF_TIMER0->EVENTS_COMPARE[0])
     {
         NRF_TIMER0->EVENTS_COMPARE[0] = 0;
@@ -223,12 +216,13 @@ void AltSoftSerial::txTimer0IRQ(TsNextAction* arg_p_nextAction)
         else if (SoftSerial._bit_pos == UART_STOP_BIT_POS + 1)
         {
         	SoftSerial._bit_pos = 0;
-            /** no more byte to write to UART */
-            NRF_TIMER0->TASKS_STOP = 1;
+        	NRF_TIMER0->TASKS_STOP = 1;
 
             if(SoftSerial._txBuffer.elementsAvailable()){
-            	/** Some elements to pop : either extend current timeslot or schedule a new timeslot */
+            	/** Some elements to pop : either extend current timeslot */
             	arg_p_nextAction->callback_action = NRF_RADIO_SIGNAL_CALLBACK_ACTION_EXTEND;
+            	arg_p_nextAction->extension.slot_length = SoftSerial._u32_mics_per_byte;
+
             }
             else
             {
