@@ -113,7 +113,7 @@ private:
 	void initTimer(void);
 	void stopTimer(void);
 	bool writeByte(uint8_t byte);
-	void initTimer0();
+	void startTimer0();
 };
 
 #endif
