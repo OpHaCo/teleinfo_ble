@@ -375,7 +375,7 @@ Teleinfo::EError Teleinfo::parseGroup(char * arg_s8_label, uint8_t * arg_u8_valu
 		if(_instInt._fieldValue != atoi((const char*)arg_u8_value))
 		{
 			_instInt._fieldValue = atoi((const char*)arg_u8_value);
-			if(_p_teleinfoListener) {_p_teleinfoListener->souscIntChanged(_instInt._fieldValue);}
+			if(_p_teleinfoListener) {_p_teleinfoListener->instIntChanged(_instInt._fieldValue);}
 			LOG_DEBUG_LN("%s = %dA", _instInt._as8_name, _instInt._fieldValue);
 		}
 		return NO_ERROR;

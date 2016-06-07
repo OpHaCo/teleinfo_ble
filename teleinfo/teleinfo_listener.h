@@ -26,6 +26,7 @@
 
 class ITeleinfoListener {
 	public :
+	virtual ~ITeleinfoListener(void){};
 	virtual void hubAddrChanged(char* arg_hubAddr) = 0;
 	virtual void optTarChanged(EOptTar arg_e_optTar) = 0;
 	virtual void baseIndexChanged(uint32_t arg_u32_baseIndex) = 0;
@@ -41,7 +42,7 @@ class ITeleinfoListener {
 	virtual void maxIntChanged(uint16_t arg_u16_maxInt) = 0;
 	virtual void souscIntChanged(uint16_t arg_u16_souscInt) = 0;
 	virtual void appPowerChanged(uint16_t arg_u32_appPower) = 0;
-	virtual void hhphcChanged(char arg_s8_hhphc);
+	virtual void hhphcChanged(char arg_s8_hhphc) = 0;;
 };
 
 #endif /* TELEINFO_TELEINFO_LISTENER_H_ */
