@@ -1,0 +1,36 @@
+{
+  "name": "nrf51_template_app",
+  "version": "0.0.1",
+  "description": "nRF51 template application",
+  "main": "index.js",
+  "scripts": {
+    "test": "jshint *.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "TODO"
+  },
+  "keywords": [
+    "rf duino",
+    "bluetooth",
+	"Nordic",
+	"nrf51"
+  ],
+  "author": {
+    "name": "Lahorde"
+  },
+  "license": "MIT",
+  "readmeFilename": "README.md",
+  "gitHead": "todo",
+  "dependencies": {
+    "noble": "git://github.com/Lahorde/noble.git#dad6886016e5bff67f4ec388118ecf409dad35e6"
+  },
+  "devDependencies": {
+    "async": "~0.2.7",
+    "jshint": "~1.1.0"
+  },
+  "bugs": {
+    "url": "TODO"
+  },
+  "homepage": "TODO"
+}
