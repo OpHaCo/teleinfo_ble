@@ -1,7 +1,7 @@
 {
-  "name": "nrf51_template_app",
+  "name": "teleinfo_ble",
   "version": "0.0.1",
-  "description": "nRF51 template application",
+  "description": "teleinfo over ble",
   "main": "index.js",
   "scripts": {
     "test": "jshint *.js"
@@ -23,7 +23,7 @@
   "readmeFilename": "README.md",
   "gitHead": "todo",
   "dependencies": {
-    "noble": "git://github.com/Lahorde/noble.git#dad6886016e5bff67f4ec388118ecf409dad35e6"
+    "noble": "https://github.com/sandeepmistry/noble"
   },
   "devDependencies": {
     "async": "~0.2.7",
