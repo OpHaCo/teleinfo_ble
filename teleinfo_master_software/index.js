@@ -62,7 +62,7 @@ util.inherits(NRF51Node, events.EventEmitter);
  *********************************/
 NRF51Node.onDiscover = function (callback, uuids, peripheral) {
     debug("discovered peripheral with name " + peripheral.advertisement.localName + ' and uuid = ' + peripheral.uuid);
-    if (peripheral.advertisement.localName === 'nrf51_node' && (uuids === undefined || uuids.indexOf(peripheral.uuid) !== -1)) {
+    if (peripheral.advertisement.localName === 'teleinfo' && (uuids === undefined || uuids.indexOf(peripheral.uuid) !== -1)) {
         debug('nrf51 peripheral discovered');
         noble.removeListener('discover', NRF51Node._bindings.onDiscover);
         noble.stopScanning();

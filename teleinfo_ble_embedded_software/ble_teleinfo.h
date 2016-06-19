@@ -34,6 +34,12 @@ class BleTeleinfo :     public ITeleinfoListener,
 						public TimerListener,
 						public IBleTransceiverListener
 {
+private :
+	enum TeleinfoType : uint8_t
+	{
+		IINST = 0,
+	};
+
 private:
 	BLETransceiver* _p_bleTransceiver;
 	Timer _timer;
@@ -44,6 +50,7 @@ public:
 	~BleTeleinfo(void);
 	void start(void);
 
+private:
 	/** from ITeleinfoListener */
 	void hubAddrChanged(char* arg_hubAddr);
 	void optTarChanged(EOptTar arg_e_optTar);

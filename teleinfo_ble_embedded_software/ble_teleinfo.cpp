@@ -66,12 +66,13 @@ void BleTeleinfo::instIntChanged(uint16_t arg_u16_instInt)
 {
 	if(_p_bleTransceiver->isConnected())
 	{
-		uint8_t loc_u8_length = sizeof(arg_u16_instInt);
-		uint8_t loc_u8_dataToSend[sizeof(arg_u16_instInt)] = {(uint8_t) ((arg_u16_instInt >> 8) & 0xFF),
+		uint8_t loc_u8_length = sizeof(arg_u16_instInt) + 1;
+		uint8_t loc_u8_dataToSend[loc_u8_length] = {(uint8_t) IINST,
+				(uint8_t)((arg_u16_instInt >> 8) & 0xFF),
 				(uint8_t)(arg_u16_instInt & 0xFF)
 		};
 		BLETransceiver::Error loc_e_err = _p_bleTransceiver->send(loc_u8_length, loc_u8_dataToSend);
-		if(loc_e_err < BLETransceiver::NO_ERROR || loc_u8_length < sizeof(arg_u16_instInt))
+		if(loc_e_err < BLETransceiver::NO_ERROR || loc_u8_length < sizeof(arg_u16_instInt) + 1)
 		{
 			LOG_ERROR("Cannot send iinst - err = %d", loc_e_err);
 		}

@@ -3,11 +3,13 @@ var debug = require('debug')('teleinfo_ble');
 var async = require('async');
 
 /************************************************
- * nrf51_template_app.js
+ * teleinfo_ble_node.js
  *************************************************/
-
-//object to test
 var nrf51Node = null;
+
+var TeleinfoTypes = Object.freeze({
+	IINST: 0
+});
 
 /**************************************
  * Exit handlers
@@ -43,10 +45,10 @@ process.on('uncaughtException', exitHandler.bind(null, {
 }));
 
 /*******************************************
- * Start nrf51Node_node_test scenario
+ * teleinf_ble init 
  *******************************************/
 
-debug('starting nrf51Node_node_test');
+debug('starting teleinfo_ble'); 
 
 async.series([
 	function (callback) {
@@ -123,7 +125,14 @@ async.series([
 				debug('no data in received frame');
 			}
 			else{
-		
+				onDataReceived(data, function(err){
+				  if(err){
+				    debug('error ' + err + ' when handling data receieved');
+				  }
+				  else{
+			            /** nothing to do - data handled */
+				  }
+				}); 			
 			}
 		});
 		nrf51Node.notifyDataReceive(function () {
@@ -141,3 +150,21 @@ function (error, results) {
 		debug('teleinfo_ble - init ok');
 	}
 });
+
+function onDataReceived(data, callback){
+	switch(data[0]){
+    	    case TeleinfoTypes.IINST :
+              var iinst = data.readUInt16BE(1);
+	      debug('IINST=' + iinst + 'A');
+	      toDB('teleinfo_iinst', iinst, callback);
+              break;
+	
+	    default:
+              debug('teleinfo data ' + data[0] + ' not handled');
+	}
+}
+
+function toDB(field, value, callback)
+{
+  callback();
+}
