@@ -23,7 +23,8 @@
   "readmeFilename": "README.md",
   "gitHead": "todo",
   "dependencies": {
-    "noble": "https://github.com/sandeepmistry/noble"
+    "noble": "https://github.com/sandeepmistry/noble",
+    "influxdb" : "*"
   },
   "devDependencies": {
     "async": "~0.2.7",
