@@ -38,6 +38,7 @@ private :
 	enum TeleinfoType : uint8_t
 	{
 		IINST = 0,
+		APP_POWER = 1
 	};
 
 private:
@@ -66,7 +67,7 @@ private:
 	void instIntChanged(uint16_t arg_u16_instInt);
 	void maxIntChanged(uint16_t arg_u16_maxInt);
 	void souscIntChanged(uint16_t arg_u16_souscInt);
-	void appPowerChanged(uint16_t arg_u32_appPower);
+	void appPowerChanged(uint32_t arg_u32_appPower);
 	void hhphcChanged(char arg_s8_hhphc);
 
 	/** from TimerListener */

@@ -77,7 +77,6 @@ void BleTeleinfo::instIntChanged(uint16_t arg_u16_instInt)
 			LOG_ERROR("Cannot send iinst - err = %d", loc_e_err);
 		}
 	}
-	_teleinfo.stopRead();
 };
 
 void BleTeleinfo::maxIntChanged(uint16_t arg_u16_maxInt)
@@ -86,7 +85,24 @@ void BleTeleinfo::maxIntChanged(uint16_t arg_u16_maxInt)
 
 void BleTeleinfo::souscIntChanged(uint16_t arg_u16_souscInt){LOG_INFO_LN("souscInt = %dA", arg_u16_souscInt);};
 
-void BleTeleinfo::appPowerChanged(uint16_t arg_u32_appPower){LOG_INFO_LN("appPower = %dVA", arg_u32_appPower);};
+void BleTeleinfo::appPowerChanged(uint32_t arg_u32_appPower)
+{
+	if(_p_bleTransceiver->isConnected())
+	{
+		uint8_t loc_u8_length = sizeof(arg_u32_appPower) + 1;
+		uint8_t loc_u8_dataToSend[loc_u8_length] = {(uint8_t) APP_POWER,
+				(uint8_t)((arg_u32_appPower >> 24) & 0xFF),
+				(uint8_t)((arg_u32_appPower >> 16) & 0xFF),
+				(uint8_t)((arg_u32_appPower >> 8) & 0xFF),
+				(uint8_t)(arg_u32_appPower & 0xFF)
+		};
+		BLETransceiver::Error loc_e_err = _p_bleTransceiver->send(loc_u8_length, loc_u8_dataToSend);
+		if(loc_e_err < BLETransceiver::NO_ERROR || loc_u8_length < sizeof(arg_u32_appPower) + 1)
+		{
+			LOG_ERROR("Cannot send apparent power - err = %d", loc_e_err);
+		}
+	}
+};
 
 void BleTeleinfo::hhphcChanged(char arg_s8_hhphc){LOG_INFO_LN("hhphc = %c", arg_s8_hhphc);};
 

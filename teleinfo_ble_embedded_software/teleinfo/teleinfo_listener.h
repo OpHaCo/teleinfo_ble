@@ -41,7 +41,7 @@ class ITeleinfoListener {
 	virtual void instIntChanged(uint16_t arg_u16_instInt) = 0;
 	virtual void maxIntChanged(uint16_t arg_u16_maxInt) = 0;
 	virtual void souscIntChanged(uint16_t arg_u16_souscInt) = 0;
-	virtual void appPowerChanged(uint16_t arg_u32_appPower) = 0;
+	virtual void appPowerChanged(uint32_t arg_u32_appPower) = 0;
 	virtual void hhphcChanged(char arg_s8_hhphc) = 0;;
 };
 

@@ -9,7 +9,8 @@ var influx = require('influx');
 var teleinfoBleNode = null;
 
 var TeleinfoTypes = Object.freeze({
-  IINST: 0
+  IINST : 0,
+  APP_POWER : 1
 });
 
 if(process.env.DB){
@@ -184,6 +185,12 @@ function onDataReceived(data, callback){
       toDB('teleinfo_iinst', iinst, callback);
       break;
 
+    case TeleinfoTypes.APP_POWER:
+      var appPower = data.readUInt32BE(1);
+      debug('APPPOWER=' + appPower + 'W');
+      toDB('teleinfo_app_power', appPower, callback);
+      break;
+      
     default:
       debug('teleinfo data ' + data[0] + ' not handled');
   }
