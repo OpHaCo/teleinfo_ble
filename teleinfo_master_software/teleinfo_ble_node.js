@@ -1,4 +1,4 @@
-var NRF51Node = require('./index.js');
+var TeleinfoBleNode = require('./index.js');
 var debug = require('debug')('teleinfo_ble');
 var async = require('async');
 var influx = require('influx');
@@ -50,17 +50,17 @@ dbClient = influx({
 /**************************************
  * Exit handlers
  ***************************************/
-function cleanNRF51Node() {
-  debug('clean test');
+function cleanTeleinfoBleNode() {
+  debug('clean TeleinfoBleNode');
   if (teleinfoBleNode !== null) {
     teleinfoBleNode.disconnect();
     teleinfoBleNode = null;
   }
-  debug('teleinfo_node: nrf51 node cleaned');
+  debug('teleinfo_node node cleaned');
 }
 
 function exitHandler(options, err) {
-  if (options.cleanup) {cleanNRF51Node();}
+  if (options.cleanup) {cleanTeleinfoBleNode();}
   if (err) {debug(err.stack);}
   if (options.exit) {process.exit();}
 }
@@ -86,96 +86,86 @@ process.on('uncaughtException', exitHandler.bind(null, {
 
 debug('starting teleinfo_ble'); 
 
-async.series([
-  function (callback) {
-    debug('discovering some teleinfoBleNode nodes');
-    NRF51Node.discover(function (err, discoveredTeleinfoBleNode) {
-      if(err){
-        callback(err);
-      }
-      else{
-        debug('teleinfoBleNode with uuid ' + discoveredTeleinfoBleNode._uuid + ' discovered');
-        teleinfoBleNode = discoveredTeleinfoBleNode;
-        teleinfoBleNode.on('connectionDrop', function(){
-          debug('connection drop - reconnect');
-          teleinfoBleNode.reconnect();
-        });
+function connectTeleinfoNode(fctCallback){
+  async.series([
+    function (callback) {
+      debug('discovering some teleinfoBleNode nodes');
+      TeleinfoBleNode.discover(function (err, discoveredTeleinfoBleNode) {
+        if(err){
+          callback(err);
+        }
+        else{
+          debug('teleinfoBleNode with uuid ' + discoveredTeleinfoBleNode._uuid + ' discovered');
+          teleinfoBleNode = discoveredTeleinfoBleNode;
+          teleinfoBleNode.on('disconnect', function(){
+            debug('teleinfoBleNode disconnected - reconnect it');
+            connectTeleinfoNode();
+          });
+          callback();
+        }
+      });
+    },
+  
+    function (callback) {
+      debug('connect to teleinfoBleNode');
+      teleinfoBleNode.connect(function () {
+        debug('connected to teleinfoBleNode');
         callback();
-      }
-    });
-  },
-
-  function (callback) {
-    debug('connect to teleinfoBleNode');
-    teleinfoBleNode.connect(function () {
-      debug('connected to teleinfoBleNode');
-      callback();
-    });
-  },
-
-  function (callback) {
-    debug('discover teleinfoBleNode services');
-    teleinfoBleNode.on('reconnect', function() {
-      debug('successfully reconnected during chars discovery!');
-      callback();
-    });
-    teleinfoBleNode.discoverServicesAndCharacteristics(function () {
-      debug('teleinfoBleNode services discovered');
-      callback();
-    });
-  },
-
-  function (callback) {
-    teleinfoBleNode.removeAllListeners('reconnect');
-    teleinfoBleNode.readDeviceName(function (deviceName) {
-      debug('teleinfoBleNode name is ' + deviceName);
-      callback();
-    });
-  },
-
-  function (callback) {
-    openDB(function(err){
-      if(!err){
-        debug('DB ' + db + ' successfully created');
-      } 
-      callback(err);
-    });	
-  },
-
-
-  function (callback) {
-    debug('notify for new data');
-    /** PREREQUISITIES : Some data must written on discovered RFDuino using serial interface */
-    teleinfoBleNode.on('dataReceived', function (data) {
-      if(data.length === 0){
-        debug('no data in received frame');
-      }
-      else{
-        onDataReceived(data, function(err){
-          if(err){
-            debug('error ' + err + ' when handling data receieved');
-          }
-          else{
-            /** nothing to do - data handled */
-          }
-        }); 			
-      }
-    });
-    teleinfoBleNode.notifyDataReceive(function () {
-      debug('you will be notified on new data');
-      callback();
-    });
-  }
-],
-
-function (error, results) {
-  if (error) {
-    debug('teleinfo_ble : - error : ' + error + ' - exiting...');
-    cleanNRF51Node();
-  } else {
-    debug('teleinfo_ble - init ok');
-  }
-});
+      });
+    },
+  
+    function (callback) {
+      debug('discover teleinfoBleNode services');
+      teleinfoBleNode.discoverServicesAndCharacteristics(function () {
+        debug('teleinfoBleNode services discovered');
+        callback();
+      });
+    },
+  
+    function (callback) {
+      openDB(function(err){
+        if(!err){
+          debug('DB ' + db + ' successfully created');
+        } 
+        callback(err);
+      });	
+    },
+  
+  
+    function (callback) {
+      debug('notify for new data');
+      /** PREREQUISITIES : Some data must written on discovered RFDuino using serial interface */
+      teleinfoBleNode.on('dataReceived', function (data) {
+        if(data.length === 0){
+          debug('no data in received frame');
+        }
+        else{
+          onDataReceived(data, function(err){
+            if(err){
+              debug('error ' + err + ' when handling data receieved');
+            }
+            else{
+              /** nothing to do - data handled */
+            }
+          }); 			
+        }
+      });
+      teleinfoBleNode.notifyDataReceive(function () {
+        debug('you will be notified on new data');
+        callback();
+      });
+    }
+  ],
+  
+  function (error, results) {
+    if (err) {
+      debug('teleinfo_ble : - error : ' + error + ' - exiting...');
+    } else {
+      debug('teleinfo_ble - init ok');
+    }
+    fctCallback(err);
+  });
+}
 
 function onDataReceived(data, callback){
   switch(data[0]){
@@ -266,3 +256,8 @@ function toDB(field, fieldValue, callback)
     }});
 }
 
+connectTeleinfoNode(function(err){
+  if(err){
+    cleanTeleinfoBleNode();
+  }
+});

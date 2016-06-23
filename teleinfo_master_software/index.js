@@ -1,6 +1,6 @@
 /*jshint loopfunc: true */
 
-var debug = require('debug')('nrf51_node');
+var debug = require('debug')('teleinfo_ble_node');
 var events = require('events');
 var util = require('util');
 
@@ -23,10 +23,10 @@ var GENERIC_ATTRIBUTE_UUID = '1801';
 var template_app_SERVICE_UUID = '6e400001b5a3f393e0a9e50e24dcca9e';
 //enable notification to this service to receive data
 var RX_UUID = '6e400003b5a3f393e0a9e50e24dcca9e';
-//write data on this service to send data to NRF51Node
+//write data on this service to send data to TeleinfoBleNode
 var TX_UUID = '6e400002b5a3f393e0a9e50e24dcca9e';
 
-function NRF51Node(peripheral) {
+function TeleinfoBleNode(peripheral) {
 	this._peripheral = peripheral;
 	this._services = {};
 	this._characteristics = {};
@@ -38,7 +38,6 @@ function NRF51Node(peripheral) {
 
 	this._uuid = peripheral.uuid;
 
-	this._peripheral.on('connectionDrop', this.onConnectionDrop.bind(this));
 	this._peripheral.on('disconnect', this.onDisconnect.bind(this));
 	this._peripheral.on('connect', this.onConnect.bind(this));
 
@@ -50,23 +49,23 @@ function NRF51Node(peripheral) {
 /*********************************
  * static variables
  *********************************/
-NRF51Node._bindings = {};
+TeleinfoBleNode._bindings = {};
 
 /*********************************
  * inheritance
  *********************************/
-util.inherits(NRF51Node, events.EventEmitter);
+util.inherits(TeleinfoBleNode, events.EventEmitter);
 
 /*********************************
  * methods
  *********************************/
-NRF51Node.onDiscover = function (callback, uuids, peripheral) {
+TeleinfoBleNode.onDiscover = function (callback, uuids, peripheral) {
     debug("discovered peripheral with name " + peripheral.advertisement.localName + ' and uuid = ' + peripheral.uuid);
     if (peripheral.advertisement.localName === 'teleinfo' && (uuids === undefined || uuids.indexOf(peripheral.uuid) !== -1)) {
         debug('nrf51 peripheral discovered');
-        noble.removeListener('discover', NRF51Node._bindings.onDiscover);
+        noble.removeListener('discover', TeleinfoBleNode._bindings.onDiscover);
         noble.stopScanning();
-        var nrf51Node = new NRF51Node(peripheral);
+        var nrf51Node = new TeleinfoBleNode(peripheral);
         callback(null, nrf51Node);
     }
     else{
@@ -74,22 +73,22 @@ NRF51Node.onDiscover = function (callback, uuids, peripheral) {
     }
 };
 
-NRF51Node.discover = function (callback, uuids) {
+TeleinfoBleNode.discover = function (callback, uuids) {
 	var startScanningOnPowerOn = function () {
         if (noble.state === 'poweredOn') {
             if(noble.listeners('discover') 
                 && noble.listeners('discover').length > 0
-                && noble.listeners('discover').indexOf(NRF51Node._bindings.onDiscover) != -1)
+                && noble.listeners('discover').indexOf(TeleinfoBleNode._bindings.onDiscover) != -1)
             {
                 //be sure to not register listener multiple times (in case of 'discover' listener not called)
                 // listener already registered - no need to reregister it
-                noble.removeListener('discover', NRF51Node._bindings.onDiscover);
+                noble.removeListener('discover', TeleinfoBleNode._bindings.onDiscover);
             }
             else{
                 //nothing to do
             }
-            NRF51Node._bindings.onDiscover = NRF51Node.onDiscover.bind(undefined, callback, uuids);
-            noble.on('discover', NRF51Node._bindings.onDiscover);
+            TeleinfoBleNode._bindings.onDiscover = TeleinfoBleNode.onDiscover.bind(undefined, callback, uuids);
+            noble.on('discover', TeleinfoBleNode._bindings.onDiscover);
 			noble.startScanning();
 		} else if (noble.state === 'unknown') {
             //Wait for adapter to be ready
@@ -101,32 +100,24 @@ NRF51Node.discover = function (callback, uuids) {
 	startScanningOnPowerOn();
 };
 
-NRF51Node.stopDiscover = function(callback){
+TeleinfoBleNode.stopDiscover = function(callback){
     debug('stop discover');
 	noble.stopScanning(callback);
 };
 
-NRF51Node.prototype.onConnectionDrop = function () {
-	this.emit('connectionDrop');
-};
-
-NRF51Node.prototype.reconnect = function (callback) {
-	this._peripheral.reconnect(callback);
-};
-
-NRF51Node.prototype.onReconnectAfterCharsDiscovery = function () {
+TeleinfoBleNode.prototype.onReconnectAfterCharsDiscovery = function () {
 	this.restoreCharsAndNotifs(function () {
-		this.emit('reconnect');
+		this.emit('connect');
 	}.bind(this));
 };
 
-NRF51Node.prototype.onReconnectDuringCharsDiscovery = function () {
+TeleinfoBleNode.prototype.onReconnectDuringCharsDiscovery = function () {
 	this.discoverServicesAndCharacteristics(function(){
-		this.emit('reconnect');
+		this.emit('connect');
 	}.bind(this));
 };
 
-NRF51Node.prototype.restoreCharsAndNotifs = function (callback) {
+TeleinfoBleNode.prototype.restoreCharsAndNotifs = function (callback) {
 	var char_index;
 	debug('restore written characteristics and notifications after connection drop');
 
@@ -157,25 +148,25 @@ NRF51Node.prototype.restoreCharsAndNotifs = function (callback) {
 };
 
 
-NRF51Node.prototype.onDisconnect = function () {
+TeleinfoBleNode.prototype.onDisconnect = function () {
 	this.emit('disconnect');
 };
 
-NRF51Node.prototype.onConnect = function () {
+TeleinfoBleNode.prototype.onConnect = function () {
 	this.emit('connect');
 };
 
-NRF51Node.prototype.toString = function () {
+TeleinfoBleNode.prototype.toString = function () {
 	return JSON.stringify({
 		uuid: this.uuid
 	});
 };
 
-NRF51Node.prototype.connect = function (callback) {
+TeleinfoBleNode.prototype.connect = function (callback) {
 	this._peripheral.connect(callback);
 };
 
-NRF51Node.prototype.disconnect = function (callback) {
+TeleinfoBleNode.prototype.disconnect = function (callback) {
 	//Empty data stored for reconnection
 	this._enabledNotifications.length = 0;
 	this._writtenCharacteristics = {};
@@ -183,14 +174,9 @@ NRF51Node.prototype.disconnect = function (callback) {
 	this._peripheral.disconnect(callback);
 };
 
-NRF51Node.prototype.reconnect = function (callback) {
-	debug('reconnect');
-	this._peripheral.reconnect(callback);
-};
-
-NRF51Node.prototype.discoverServicesAndCharacteristics = function (callback) {
-	this._peripheral.removeAllListeners('reconnect');
-	this._peripheral.on('reconnect', this.onReconnectDuringCharsDiscovery.bind(this, callback));
+TeleinfoBleNode.prototype.discoverServicesAndCharacteristics = function (callback) {
+	this._peripheral.removeAllListeners('connect');
+	this._peripheral.on('connect', this.onReconnectDuringCharsDiscovery.bind(this, callback));
 	this._peripheral.discoverAllServicesAndCharacteristics(function (error, services, characteristics) {
 		if (error === null) {
 			for (var i in services) {
@@ -210,13 +196,13 @@ NRF51Node.prototype.discoverServicesAndCharacteristics = function (callback) {
 			}
 		}
 
-		this._peripheral.removeAllListeners('reconnect');
-		this._peripheral.on('reconnect', this.onReconnectAfterCharsDiscovery.bind(this));
+		this._peripheral.removeAllListeners('connect');
+		this._peripheral.on('connect', this.onReconnectAfterCharsDiscovery.bind(this));
 		callback();
 	}.bind(this));
 };
 
-NRF51Node.prototype.writeCharacteristic = function (uuid, data, callback) {
+TeleinfoBleNode.prototype.writeCharacteristic = function (uuid, data, callback) {
 	this._characteristics[uuid].write(data, false, function () {
 		//Keep written characteristics for a possible restoration
 		this._writtenCharacteristics[uuid] = data;
@@ -224,7 +210,7 @@ NRF51Node.prototype.writeCharacteristic = function (uuid, data, callback) {
 	}.bind(this));
 };
 
-NRF51Node.prototype.notifyCharacteristic = function (uuid, notify, listener, callback) {
+TeleinfoBleNode.prototype.notifyCharacteristic = function (uuid, notify, listener, callback) {
 	var characteristic = this._characteristics[uuid];
 	if (characteristic === undefined) {
 		//TODO throw error
@@ -249,7 +235,7 @@ NRF51Node.prototype.notifyCharacteristic = function (uuid, notify, listener, cal
 	}
 };
 
-NRF51Node.prototype.readDataCharacteristic = function (uuid, callback) {
+TeleinfoBleNode.prototype.readDataCharacteristic = function (uuid, callback) {
 	if (this._characteristics[uuid] === undefined) {
 		debug('characteristic with uuid ' + uuid + ' not supported by ble_mini_node');
 	}
@@ -260,38 +246,38 @@ NRF51Node.prototype.readDataCharacteristic = function (uuid, callback) {
 	}
 };
 
-NRF51Node.prototype.readStringCharacteristic = function (uuid, callback) {
+TeleinfoBleNode.prototype.readStringCharacteristic = function (uuid, callback) {
 	this.readDataCharacteristic(uuid, function (data) {
 		callback(data.toString());
 	});
 };
 
-NRF51Node.prototype.readDeviceName = function (callback) {
+TeleinfoBleNode.prototype.readDeviceName = function (callback) {
 	this.readStringCharacteristic(DEVICE_NAME_UUID, callback);
 };
 
-NRF51Node.prototype.readAppearance = function (callback) {
+TeleinfoBleNode.prototype.readAppearance = function (callback) {
 	this.readDataCharacteristic(APPEARANCE_UUID, callback);
 };
 
-NRF51Node.prototype.readPreferredConnParams = function (callback) {
+TeleinfoBleNode.prototype.readPreferredConnParams = function (callback) {
 	this.readDataCharacteristic(PERIPHERAL_PREFERRED_CONNECTION_PARAMETERS_UUID, callback);
 };
 
-NRF51Node.prototype.writeData = function (data, callback) {
+TeleinfoBleNode.prototype.writeData = function (data, callback) {
 	this.writeCharacteristic(TX_UUID, data, callback);
 };
 
-NRF51Node.prototype.notifyDataReceive = function (callback) {
+TeleinfoBleNode.prototype.notifyDataReceive = function (callback) {
 	this.notifyCharacteristic(RX_UUID, true, this._bindings.onDataReceived, callback);
 };
 
-NRF51Node.prototype.unnotifyDataReceive = function (callback) {
+TeleinfoBleNode.prototype.unnotifyDataReceive = function (callback) {
 	this.notifyCharacteristic(RX_UUID, false, this._bindings.onDataReceived, callback);
 };
 
-NRF51Node.prototype.onDataReceived = function (data) {
+TeleinfoBleNode.prototype.onDataReceived = function (data) {
 	this.emit('dataReceived', data);
 };
 
-module.exports = NRF51Node;
+module.exports = TeleinfoBleNode;
